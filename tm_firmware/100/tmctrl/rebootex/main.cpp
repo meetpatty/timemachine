@@ -13,24 +13,22 @@
 
 namespace {
 	using v_v_function_t = std::add_pointer_t<void()>;
-	using v_iiii_function_t = std::add_pointer_t<void(s32,s32,s32,s32)>;
+	using v_iii_function_t = std::add_pointer_t<void(s32,s32,s32)>;
 	using module_start_function_t = std::add_pointer_t<int(SceSize, void*)>;
 
-	inline auto const cache1Ptr = reinterpret_cast<v_v_function_t const>(0x88c03f50);
-	inline auto const cache2Ptr = reinterpret_cast<v_v_function_t const>(0x88c03b80);
-	inline auto const rebootEntryPtr = reinterpret_cast<v_iiii_function_t const>(0x88c00000);
+	inline  v_iii_function_t rebootEntryPtr;
 
 	char path[260];
 
-	[[noreturn]] inline void rebootEntry(s32 const a0, s32 const a1, s32 const a2, s32 const a3) {
-		rebootEntryPtr(a0, a1, a2, a3);
+	[[noreturn]] inline void rebootEntry(s32 const a0, s32 const a1, s32 a2) {
+		rebootEntryPtr(a0, a1, a2);
 
 		__builtin_unreachable();
 	}
 
 	void clearCaches() {
-		cache1Ptr();
-		cache2Ptr();
+		iplKernelDcacheWritebackInvalidateAll();
+		iplKernelIcacheInvalidateAll();
 	}
 
 	FATFS fs;
@@ -47,12 +45,13 @@ namespace {
 
 	int sceBootLfatOpenPatched(char *filename) {
 
-		if(strcmp(filename, "/kd/lfatfs.prx") == 0) {
-			strcpy(filename, "/tmctrl100.prx");
-		}
-
 		strcpy(path, "/TM/100");
-		strcat(path, filename);
+
+		if(strcmp(filename, "/kd/lfatfs.prx") == 0) {
+			strcat(path, "/tmctrl100.prx");
+		}
+		else
+			strcat(path, filename);
 
 		if (f_open(&fp, path, FA_OPEN_EXISTING | FA_READ) == FR_OK) {
 			return 1;
@@ -77,23 +76,23 @@ namespace {
 	}
 
 	int sysMemModuleStartPatched(SceSize args, void *argp, module_start_function_t module_start) {
+
 		return module_start(4, argp);
 	}
 
-	int loadCoreModuleStartPatched(SceSize args, void *argp, module_start_function_t module_start) {
+	int loadCoreModuleStartPatched(module_start_function_t module_start, SceSize args, void *argp) {
 
-		u32 const text_addr = reinterpret_cast<u32>(module_start) - 0xcf4;
-
+		u32 const text_addr = reinterpret_cast<u32>(module_start) - 0x0cf4;
 
 		// NoPlainModuleCheckPatch (mfc0 $v0, $22 -> li $v0, 1)
-		_sw(0x24020001, text_addr + 0x3A00);
+		_sw(0x24020001, text_addr + 0x3a00);
 
 		/* NoPlainPspConfigCheckPatch */
 	
 		// mfc0 $v0, $22 -> li $v0, 1
-		_sw(0x24020001, text_addr + 0x2a14);
+		_sw(0x24020001, text_addr+0x2a14);
 		// li $v0, 0xFFFFFFFF -> mov $v0, $a1 -> (v0 = -1 -> v0 = filesize)
-		_sw(0x00051021, text_addr + 0x2a20);
+		_sw(0x00051021, text_addr+0x2a20);
 
 		clearCaches();
 
@@ -101,25 +100,25 @@ namespace {
 	}
 }
 
-int main(s32 const a0, s32 const a1, s32 const a2, s32 const a3) {
+int main(s32 const a0, s32 const a1, s32 const a2,u32 reboot_text_addr) {
+
+	rebootEntryPtr = reinterpret_cast<v_iii_function_t>(reboot_text_addr + 0x170);
 
 	// jal sysmem::module_start -> jal SysMemStart
-	// li  $a0, 4 -> mov $a2, $s1  (a0 = 4 -> a2 = module_start)
-	MAKE_CALL(0x88c01014, sysMemModuleStartPatched);
-	_sw(0x02203021, 0x88c01018);
+	// li  $a0, 4 -> mov $a2, $v0  (a0 = 4 -> a2 = module_start)
+	MAKE_CALL(reboot_text_addr + 0xff4, sysMemModuleStartPatched);
+	_sw(0x00403021, reboot_text_addr + 0xff8);
 	
-	_sw(0x00403021, 0x88c00ff0);
-	MAKE_JUMP(0x88c00ff8, loadCoreModuleStartPatched);
+	MAKE_JUMP(reboot_text_addr + 0xfdc, loadCoreModuleStartPatched);
 
-	// Patch removeByDebugSection, make it return 1	
-	_sw(0x03e00008, 0x88C01d20);
-	_sw(0x24020001, 0x88C01d24);
+	// NoPlainModuleCheckPatch (mfc0 $v0, $22 -> li $v0, 1)
+	_sw(0x24020001, reboot_text_addr + 0x3af8);
 
 	/* File open redirection */
-	MAKE_CALL(0x88c00074, sceBootLfatMountPatched);
-	MAKE_CALL(0x88c00084, sceBootLfatOpenPatched);
-	MAKE_CALL(0x88c000b4, sceBootLfatReadPatched);
-	MAKE_CALL(0x88c000e0, sceBootLfatClosePatched);
+	MAKE_CALL(reboot_text_addr + 0x08, sceBootLfatMountPatched);
+	MAKE_CALL(reboot_text_addr + 0x9c, sceBootLfatOpenPatched);
+	MAKE_CALL(reboot_text_addr + 0xcc, sceBootLfatReadPatched);
+	MAKE_CALL(reboot_text_addr + 0xf8, sceBootLfatClosePatched);
 
 	clearCaches();
 
@@ -132,5 +131,5 @@ int main(s32 const a0, s32 const a1, s32 const a2, s32 const a3) {
 	iplSysconInit();
 	iplSysconCtrlMsPower(true);
 	
-	rebootEntry(a0, a1, a2, a3);
+	rebootEntry(a0, a1, a2);
 }

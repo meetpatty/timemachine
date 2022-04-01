@@ -21,12 +21,6 @@ PSP_MODULE_INFO("TimeMachine_Control", PSP_MODULE_KERNEL | PSP_MODULE_SINGLE_STA
 int sceDisplaySetBrightnessPatched(int level, int unk1);
 int SysEventHandler(int eventId, char *eventName, void *param, int *result);
 
-void (*rebootex_entry)(int a0,int a1,int bootcode,int dummy) = (void *)0x88fc0000;
-
-#define REBOOT_150_SIZE 0x16d40
-
-char rebootbin[REBOOT_150_SIZE];
-
 PspSysEventHandler sysEventHandler =
 	{
 		.size = sizeof(PspSysEventHandler),
@@ -48,6 +42,7 @@ int (* GetMsSize)(void);
 
 int start_thread;
 static SceModule *last_module;
+u32 sceRebootTextAddr;
 
 STMOD_HANDLER stmod_handler = NULL;
 
@@ -202,38 +197,21 @@ int sceDisplaySetBrightnessPatched(int level, int unk1)
 	return sceDisplaySetBrightness(level, unk1);
 }
 
-int sceKernelRebootBeforeForUserPatched(void *arg)
+int sceKernelRebootBeforeForUserPatched(int a0)
 {
-	//Read 1.50 reboot.bin
-	int fd = sceIoOpen("ms0:/TM/100/reboot.bin", 1, 0);
+	sceKernelGzipDecompress((u8 *)0x88fc0000, 0x10000, rebootex_01g, 0);
 
-	if (fd < 0)
-		return -1;
-
-	SceOff size = sceIoLseek(fd, 0, PSP_SEEK_END);
-
-	if (size == REBOOT_150_SIZE)
-	{
-		sceIoLseek(fd, 0, PSP_SEEK_SET);
-		sceIoRead(fd, (void *)rebootbin, REBOOT_150_SIZE);
-		sceIoClose(fd);
-	}
-	else
-	{
-		sceIoClose(fd);
-		return -1;
-	}
-
-	return sceKernelRebootBeforeForUser(arg);
+	return sceKernelRebootBeforeForUser(a0);
 }
 
-int sceKernelRebootPatched(int a0, int a1, int bootcode, int dummy)
+int sceKernelRebootPatched(int *a0, int *a1, int* a2)
 {
-	memset((void *)0x88c00000, 0, 0x400000);
-	sceKernelGzipDecompress((u8 *)0x88fc0000, 0x10000, rebootex_01g, 0);
-	memcpy((void *)0x88c00000, (void *)rebootbin, REBOOT_150_SIZE);
+	void (*rebootex_entry)(int *a0, int *a1, int* a2, u32 sceRebootTextAddr) = (void *)0x88fc0000;
 
-	rebootex_entry(a0, a1, bootcode, dummy);
+	//Jump to rebootex
+	rebootex_entry(a0, a1, a2, sceRebootTextAddr);
+
+	__builtin_unreachable();
 }
 
 void ClearCaches()
@@ -248,12 +226,6 @@ void PatchSceLoadExec()
 	if (mod != NULL)
 	{
 		MAKE_CALL(mod->text_addr + 0xee8, sceKernelRebootBeforeForUserPatched);
-
-		// Skip call to LoadReboot
-		_sw(0, mod->text_addr + 0xf00);
-
-		// Skip sceReboot setup
-		MAKE_JUMP(mod->text_addr + 0x1094, mod->text_addr + 0x1160);
 
 		// Patch call to sceKernelReboot
 		MAKE_CALL(mod->text_addr + 0x1188, sceKernelRebootPatched);
@@ -319,6 +291,9 @@ int OnModuleStart(SceModule *mod)
 	}
 	else if (strcmp(moduleName, "sceMSFAT_Driver") == 0) {
 		KERNEL_HIJACK_FUNCTION(text_addr + 0x0728, free_heap_all_hook, _free_heap_all);
+	}
+	else if (strcmp(moduleName, "sceReboot") == 0) {
+		sceRebootTextAddr = text_addr;
 	}
 
 	return 0;
