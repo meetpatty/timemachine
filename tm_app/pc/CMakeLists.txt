@@ -27,6 +27,17 @@ set(TM_FILES
     # 1.50
     tm150_tmctrl150 ${TM_FW_DIR}150/tmctrl/tmctrl150.prx
     tm150_payload ${TM_FW_DIR}150/ipl_payload/payload_01g.bin
+
+    # 1.53
+    tm153_tmctrl153 ${TM_FW_DIR}153/tmctrl/tmctrl153.prx
+    tm153_payload ${TM_FW_DIR}153/ipl_payload/payload_01g.bin
+    tm153_index153 ${CFW_FILES_DIR}153/index.153
+    tm153_uxmb ${CFW_FILES_DIR}153/uxmb.prx
+    tm153_recovery ${CFW_FILES_DIR}153/recovery.elf
+    tm153_bootmenu ${CFW_FILES_DIR}153/bootmenu.elf
+    tm153_isol1 ${CFW_FILES_DIR}153/isol1.bin
+    tm153_isol2 ${CFW_FILES_DIR}153/isol2.bin
+    tm153_vshmain ${CFW_FILES_DIR}153/vshmain.prx
     
     # 2.00
     tm200_tmctrl200 ${TM_FW_DIR}200/tmctrl/tmctrl200.prx

@@ -313,6 +313,43 @@ int main(int argc, char *argv[]) {
         WriteFile((installDir + "/payload.bin").c_str(), (void*)tm150_payload, sizeof(tm150_payload));
         WriteFile((installDir + "/tmctrl150.prx").c_str(), (void*)tm150_tmctrl150, sizeof(tm150_tmctrl150));
     }
+     else if (version.compare("1.53") == 0) {
+        string installDir = tmDir + "/153";
+        extractFirmware(installDir, upDir, "150", true, true, verbose);
+
+        fs::create_directory(installDir + "/fw153");
+        fs::create_directory(installDir + "/recover");
+
+        const auto copyOptions = fs::copy_options::overwrite_existing 
+                               | fs::copy_options::recursive;
+
+        for (int i = 1; i <= 12; i++) {
+            string fileName = std::to_string(i) + ".bmp";
+            if (i < 10)
+                fileName = "0" + fileName;
+            fs::copy(installDir + "/vsh/resource/" + fileName, installDir + "/recover/" + fileName, copyOptions);
+        }
+
+        fs::copy(installDir + "/vsh/resource/gameboot.pmf", installDir + "/recover/gameboot.pmf", copyOptions);
+        fs::copy(installDir + "/vsh/resource/topmenu_plugin.rco", installDir + "/recover/topmenu_plugin.rco", copyOptions);
+        fs::copy(installDir + "/vsh/resource/opening_plugin.rco", installDir + "/recover/opening_plugin.rco", copyOptions);
+        fs::copy(installDir + "/font/ltn0.pgf", installDir + "/recover/ltn0.pgf", copyOptions);
+        fs::copy(installDir + "/vsh/etc/index.dat", installDir + "/recover/index.150", copyOptions);
+        fs::copy(installDir + "/vsh/module/vshmain.prx", installDir + "/vsh/module/vshmain_real.prx", copyOptions);
+
+        WriteFile((installDir + "/recover/index.153").c_str(), (void*)tm153_index153, sizeof(tm153_index153));
+        WriteFile((installDir + "/fw153/uxmb.prx").c_str(), (void*)tm153_uxmb, sizeof(tm153_uxmb));
+        WriteFile((installDir + "/fw153/recovery.elf").c_str(), (void*)tm153_recovery, sizeof(tm153_recovery));
+        WriteFile((installDir + "/fw153/bootmenu.elf").c_str(), (void*)tm153_bootmenu, sizeof(tm153_bootmenu));
+        WriteFile((installDir + "/fw153/loadiso.pbp").c_str(), (void*)tm153_isol1, sizeof(tm153_isol1));
+        WriteFile((installDir + "/fw153/FUSEDCORE.BIN").c_str(), (void*)tm153_isol2, sizeof(tm153_isol2));
+        WriteFile((installDir + "/vsh/etc/index.dat").c_str(), (void*)tm153_index153, sizeof(tm153_index153));
+        WriteFile((installDir + "/vsh/module/vshmain.prx").c_str(), (void*)tm153_vshmain, sizeof(tm153_vshmain));
+
+        WriteFile((installDir + "/tm_sloader.bin").c_str(), (void*)tm_sloader, sizeof(tm_sloader));
+        WriteFile((installDir + "/payload.bin").c_str(), (void*)tm153_payload, sizeof(tm153_payload));
+        WriteFile((installDir + "/tmctrl153.prx").c_str(), (void*)tm153_tmctrl153, sizeof(tm153_tmctrl153));
+    }
     else if (version.compare("2.00") == 0) {
         string installDir = tmDir + "/200";
         extractFirmware(installDir, upDir, "200", true, true, verbose);

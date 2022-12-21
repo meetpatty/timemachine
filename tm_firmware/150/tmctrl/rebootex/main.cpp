@@ -46,7 +46,7 @@ namespace {
 
 	int sceBootLfatOpenPatched(char *filename) {
 		if(strcmp(filename, "/kd/lfatfs.prx") == 0) {
-			strcpy(filename, "/tmctrl150.prx");
+			strcpy(filename, TMCTRL_FILE);
 		}
 
 		strcpy(path, TM_PATH);

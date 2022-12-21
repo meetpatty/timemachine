@@ -17,6 +17,16 @@
 #include "tm150_payload.h"
 #include "tm150_tmctrl150.h"
 
+#include "tm153_payload.h"
+#include "tm153_tmctrl153.h"
+#include "tm153_index153.h"
+#include "tm153_uxmb.h"
+#include "tm153_recovery.h"
+#include "tm153_bootmenu.h"
+#include "tm153_isol1.h"
+#include "tm153_isol2.h"
+#include "tm153_vshmain.h"
+
 // 2.00
 #include "tm200_payload.h"
 #include "tm200_tmctrl200.h"
