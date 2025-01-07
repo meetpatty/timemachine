@@ -23,7 +23,7 @@ char path[260];
 FileHandler file_handler[MAX_FILES];
 #endif
 
-#if defined FLASH_EMU_TOO_MANY_FILES_FIX && PSP_FW_VERSION < 660
+#if defined FLASH_EMU_TOO_MANY_FILES_FIX && PSP_FW_VERSION < 500
 int (* df_open)(s32 a0, char* path, s32 a2, s32 a3);
 int (* df_dopen)(s32 a0, char* path, s32 a2);
 int (* df_devctl)(s32 a0, s32 a1, s32 a2, s32 a3);
@@ -35,7 +35,17 @@ SceUID flashemuThid;
 int msNotReady = 1;
 int installed = 0;
 
+#if PSP_FW_VERSION < 500
 extern PspSysEventHandler sysEventHandler;
+#else
+int SysEventHandler(int eventId, char *eventName, void *param, int *result);
+PspSysEventHandler sysEventHandler =
+	{
+		.size = sizeof(PspSysEventHandler),
+		.name = "",
+		.type_mask = 0x00FFFF00,
+		.handler = SysEventHandler};
+#endif
 
 #define Lock() sceKernelWaitSema(flashemu_sema, 1, NULL)
 #define UnLock() sceKernelSignalSema(flashemu_sema, 1)
@@ -152,6 +162,19 @@ int InstallFlashEmu()
 
 int UninstallFlashEmu()
 {
+#if PSP_FW_VERSION >= 500
+	SceUInt timeout = 500000;
+	sceKernelWaitSema(flashemu_sema, 1, &timeout);
+	sceKernelDeleteSema(flashemu_sema);
+
+	sceIoUnassign("flash0:");
+	sceIoUnassign("flash1:");
+	sceIoUnassign("flash2:");
+	sceIoUnassign("flash3:");
+
+	sceKernelUnregisterSysEventHandler(&sysEventHandler);
+#endif
+
 	return 0;
 }
 
@@ -965,7 +988,7 @@ int CloseOpenFile(int *argv)
 	return 0x80010018;
 }
 
-#if PSP_FW_VERSION < 660
+#if PSP_FW_VERSION < 500
 int df_dopenPatched(s32 a0, char* path, s32 a2)
 {
 	while(1) {
@@ -1012,6 +1035,69 @@ int df_devctlPatched(s32 a0, s32 a1, s32 a2, s32 a3)
 		if (res != 0x80010018) {
 			return res;
 		}
+
+		res = sceKernelExtendKernelStack(0x4000, (void *)CloseOpenFile, 0);
+
+		if (res < 0)
+			break;
+	}
+
+	return res;
+}
+#else
+int df_dopenPatched(int type, void * cb, void *arg)
+{
+	int res;
+
+	while(1) {
+		res = sceKernelExtendKernelStack(type, cb, arg);
+		if (res != 0x80010018)
+			return res;
+
+		if (*(int *)(arg + 4) == 0)
+			continue;
+
+		if (memcmp((void *)(*(int *)(arg + 4) + 4), TM_PATH_W, sizeof(TM_PATH_W)) == 0)
+			continue;
+
+		res = sceKernelExtendKernelStack(0x4000, (void *)CloseOpenFile, 0);
+		if (res < 0)
+			break;
+	}
+	return res;
+}
+
+int df_openPatched(int type, void * cb, void *arg)
+{
+	int res;
+
+	while(1) {
+		res = sceKernelExtendKernelStack(type, cb, arg);
+		if (res != 0x80010018)
+			return res;
+
+		if (*(int *)(arg + 4) == 0)
+			continue;
+
+		if (memcmp((void *)(*(int *)(arg + 4) + 4), TM_PATH_W, sizeof(TM_PATH_W)) == 0)
+			continue;
+
+		res = sceKernelExtendKernelStack(0x4000, (void *)CloseOpenFile, 0);
+		if (res < 0)
+			break;
+	}
+	return res;
+}
+
+int df_devctlPatched(int type, void *cb, void *arg)
+{
+	int res;
+
+	while(1)
+	{
+		res = sceKernelExtendKernelStack(type, cb, arg);
+		if (res != 0x80010018)
+			break;
 
 		res = sceKernelExtendKernelStack(0x4000, (void *)CloseOpenFile, 0);
 
@@ -1093,3 +1179,27 @@ int sceLfatfsStop()
 {
 	return 0;
 }
+
+#if PSP_FW_VERSION >= 500
+int SysEventHandler(int eventId, char *eventName, void *param, int *result)
+{
+	if (eventId == 0x4000) //suspend
+	{
+#ifdef FLASH_EMU_TOO_MANY_FILES_FIX
+		int i;
+		for(i = 0; i < MAX_FILES; i++)
+		{
+			if(file_handler[i].opened && file_handler[i].unk_8 == 0 && file_handler[i].flags != DIR_FLAG)
+			{
+				file_handler[i].offset = sceIoLseek(file_handler[i].fd, 0, PSP_SEEK_CUR);
+				file_handler[i].unk_8 = 1;
+				sceIoClose(file_handler[i].fd);
+			}
+		}
+#endif
+	}
+	else if (eventId == 0x10009) // resume
+		msNotReady = 1;
+	return 0;
+}
+#endif

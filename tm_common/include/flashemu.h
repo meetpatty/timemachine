@@ -22,4 +22,10 @@ typedef struct
 
 #endif
 
+#if PSP_FW_VERSION >= 500
+int df_dopenPatched(int type, void * cb, void *arg);
+int df_openPatched(int type, void * cb, void *arg);
+int df_devctlPatched(int type, void *cb, void *arg);
+#endif
+
 #endif

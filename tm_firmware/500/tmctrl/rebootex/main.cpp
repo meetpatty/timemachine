@@ -1,3 +1,10 @@
+/* 
+ * Based on rebootex/main.c from minimum edition - https://github.com/PSP-Archive/minimum_edition
+*/
+
+#include <string.h>
+#include <type_traits>
+
 #include <cache.h>
 #include <ff.h>
 #include <lowio.h>
@@ -5,28 +12,42 @@
 #include <syscon.h>
 
 #include <pspmacro.h>
-#include <type_traits>
-
 #include <tm_common.h>
 
+#include "rebootPatches.h"
+#include "rebootex_config.h"
+#include "btcnf.h"
+
+#if PSP_MODEL == 0
+#define BTCNF_PATH "/kd/pspbtcnf.bin"
+#elif PSP_MODEL == 1
+#define BTCNF_PATH "/kd/pspbtcnf_02g.bin"
+#endif
+
 namespace {
-	using v_v_function_t = std::add_pointer_t<void()>;
-	using v_iiii_function_t = std::add_pointer_t<void(s32,s32,s32,s32)>;
-	using module_start_function_t = std::add_pointer_t<int(SceSize, void*, void*)>;
 
-	inline auto const cache1Ptr = reinterpret_cast<v_v_function_t const>(0x886007C0);
-	inline auto const cache2Ptr = reinterpret_cast<v_v_function_t const>(0x8860022C);
-	inline auto const rebootEntryPtr = reinterpret_cast<v_iiii_function_t const>(0x88600000);
+	using v_iiiiiii_function_t = std::add_pointer_t<void(s32,s32,s32,s32,s32,s32,s32)>;
+	inline auto const rebootEntryPtr = reinterpret_cast<v_iiiiiii_function_t const>(0x88600000);
 
-	[[noreturn]] inline void rebootEntry(s32 const a0, s32 const a1, s32 const a2, s32 const a3) {
-		rebootEntryPtr(a0, a1, a2, a3);
+	int btcnf_load_flag;
+	int rtm_flag;
+
+	char *systemctrl = (char *)0x88FB0100;
+	u32 sizeSystemctrl = 0;
+
+	char *onRebootAfter = NULL;
+	void *onRebootBuf = NULL;
+	u32 onRebootSize = 0;
+	u32 onRebootFlag = 0;
+
+	int bootIndex = 0;
+
+	char path[260];
+
+	[[noreturn]] inline void rebootEntry(s32 const a0, s32 const a1, s32 const a2, s32 const a3, s32 const t0, s32 const t1, s32 const t2) {
+		rebootEntryPtr(a0, a1, a2, a3, t0, t1, t2);
 
 		__builtin_unreachable();
-	}
-
-	void clearCaches() {
-		cache1Ptr();
-		cache2Ptr();
 	}
 
 	FATFS fs;
@@ -41,88 +62,106 @@ namespace {
 	}
 
 	int sceBootLfatOpenPatched(char *filename) {
-		//if (f_open(&fp, filename, FA_OPEN_EXISTING | FA_READ) == FR_OK)
-		return 0;
+
+		if (strcmp(filename, BTCNF_PATH) == 0)
+		{
+			if (bootIndex == 0)
+				filename[9] = 'j';
+			else if (bootIndex == 1)
+				filename[9] = 'k';
+			else if (bootIndex == 2)
+				filename[9] = 'l';
+			
+			if (onRebootAfter)
+				btcnf_load_flag = 1;
+		}
+		else if (strcmp(filename, "/rtm.prx") == 0)
+		{
+			rtm_flag = 1;
+			return 0;
+		}
+		else if (strcmp(filename, "/kd/lfatfs.prx") == 0) {
+			strcpy(filename, "/tmctrl500.prx");
+		}
+
+		strcpy(path, TM_PATH);
+		strcat(path, filename);
+
+		if (f_open(&fp, path, FA_OPEN_EXISTING | FA_READ) == FR_OK) {
+			return 0;
+		}
+
+		return -1;
 	}
 
 	int sceBootLfatReadPatched(void *buffer, int buffer_size) {
-		// u32 bytes_read;
-		// if (f_read(&fp, buffer, buffer_size, &bytes_read) == FR_OK)
-		return 0;
+
+		if (rtm_flag)
+		{
+			int load_size = onRebootSize;
+
+			if( load_size > buffer_size)
+				load_size = buffer_size;
+
+			memcpy(buffer, onRebootBuf, load_size);
+
+			onRebootSize -= load_size;
+			onRebootBuf += load_size;
+			return load_size;
+		}
+
+		u32 ret;
+		f_read(&fp, buffer, buffer_size, &ret);
+
+		if (btcnf_load_flag)
+		{
+			btcnf_load_flag = 0;
+
+			module_rtm[0].before_path = onRebootAfter;
+			module_rtm[0].flag = onRebootFlag;
+
+			ret = btcnf_patch(buffer, ret, module_rtm, 0, 0);
+		}
+
+		return ret;
 	}
 
 	int sceBootLfatClosePatched() {
-		// f_close(&fp);
+
+		if(rtm_flag)
+		{
+			rtm_flag = 0;
+			return 0;
+		}
+
+		f_close(&fp);
+	
 		return 0;
 	}
-
-	int checkPSPHeaderPatched() {
-		return 0;
-	}
-
-	v_v_function_t memlmdOriginal;
-
-	int memlmdDecrypt() {
-		return 0;
-	}
-
-	int loadCoreModuleStartPatched(SceSize args, void *argp, void *unk, module_start_function_t module_start) {
-		u32 const text_addr = reinterpret_cast<u32>(module_start) - 0xC74;
-
-		MAKE_CALL(text_addr + 0x41D0, memlmdDecrypt);
-		MAKE_CALL(text_addr + 0x68F8, memlmdDecrypt);
-
-		memlmdOriginal = reinterpret_cast<v_v_function_t>(text_addr + 0x81D4);
-
-		// disable unsign check
-		_sw(0x1021, text_addr + 0x691C); // move $v0, $zero
-		_sw(0x1021, text_addr + 0x694C); // move $v0, $zero
-		_sw(0x1021, text_addr + 0x69E4); // move $v0, $zero
-
-		clearCaches();
-
-		return module_start(args, argp, unk);
-	}
-
-	u32 config1, config2, config3, config4, config5, config6;
 }
 
-int main(s32 const a0, s32 const a1, s32 const a2, s32 const a3) {
-	MAKE_CALL(0x8860200C, sceBootLfatMountPatched);
-	MAKE_CALL(0x88602020, sceBootLfatOpenPatched);
-	MAKE_CALL(0x88602090, sceBootLfatReadPatched);
-	MAKE_CALL(0x886020BC, sceBootLfatClosePatched);
+int main(s32 const a0, s32 const a1, s32 const a2, s32 const a3, s32 const t0, s32 const t1, s32 const t2) {
 
-	// patch ~PSP header check
-	_sw(0xAFA50000, 0x88605030); // sw $a1, ($sp)
-	_sw(0x20A30000, 0x88605034); // addi $v1, $a1, 0
+	struct RebootexParam *rebootex_param = reinterpret_cast<RebootexParam *>(REBOOTEX_PARAM_OFFSET);
 
-	MAKE_CALL(0x88606A90, checkPSPHeaderPatched);
+	bootIndex = rebootex_param->reboot_index;
 
-	MAKE_FUNCTION_RETURN(0x886030E0, 1);
+	onRebootAfter = reinterpret_cast<char *>(rebootex_param->on_reboot_after);
+	onRebootBuf	= rebootex_param->on_reboot_buf;
+	onRebootSize	= rebootex_param->on_reboot_size;
+	onRebootFlag	= rebootex_param->on_reboot_flag;
 
-	_sw(0, 0x88602018);
-	_sw(0, 0x8860206C);
-	_sw(0, 0x88602084);
+	btcnf_load_flag = 0;
+	rtm_flag = 0;
 
-	// Patch the call to LoadCore module_start 
-	_sw(0x113821, 0x88604EF0); // jr $t7 -> move $a3, $t7 // a3 = LoadCore module_start 
-	MAKE_JUMP(0x88604EF4, loadCoreModuleStartPatched); // move $sp, $s4 -> j PatchLoadCore
-	_sw(0x2A0E821, 0x88604EF8); //nop -> move $sp, $s4
+	MsLfatFuncs funcs = {
+		.msMount = reinterpret_cast<void *>(sceBootLfatMountPatched),
+		.msOpen = reinterpret_cast<void *>(sceBootLfatOpenPatched),
+		.msRead = reinterpret_cast<void *>(sceBootLfatReadPatched),
+		.msClose = reinterpret_cast<void *>(sceBootLfatClosePatched),
+	};
 
-	_sw(0, 0x88606D38);
-
-	MAKE_FUNCTION_RETURN0(0x886013CC);
-	
-	//Read systemctrl config ?
-	config1 = _lw(0x88FB00D0);
-	config2 = _lw(0x88FB00D4);
-	config3 = _lw(0x88FB00D8);
-	config4 = _lw(0x88FB00DC);
-	config5 = 0;
-	config6 = 0;
-
-	clearCaches();
+	patchRebootBin(&funcs);
 
 	// Hmm?
 	iplSysregSpiClkEnable(ClkSpi::SPI1);
@@ -135,5 +174,5 @@ int main(s32 const a0, s32 const a1, s32 const a2, s32 const a3) {
 	iplSysconInit();
 	iplSysconCtrlMsPower(true);
 	
-	rebootEntry(a0, a1, a2, a3);
+	rebootEntry(a0, a1, a2, a3, t0, t1, t2);
 }

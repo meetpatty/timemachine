@@ -1,9 +1,6 @@
-add_subdirectory(payloadex)
-add_subdirectory(payloadex_loader)
-
 get_target_property(LINKER_SCRIPT tm_common::linker_script INTERFACE_SOURCES)
 
-set(LOAD_ADDR 0x040E0000)
+set(LOAD_ADDR 0x10000)
 
 configure_file(
     "${LINKER_SCRIPT}"
@@ -12,7 +9,7 @@ configure_file(
 
 foreach(GEN 1 2)
     math(EXPR MODEL "${GEN}-1")
-    set(EXEC_NAME payload_500_0${GEN}g)
+    set(EXEC_NAME payloadex_loader_500_0${GEN}g)
     add_executable(${EXEC_NAME})
     target_sources(${EXEC_NAME} PRIVATE main.cpp)
     target_link_libraries(${EXEC_NAME} PRIVATE tm_common::crt c utils iplsdk::cache iplsdk::lowio iplsdk::syscon tm_common::common)
@@ -20,25 +17,21 @@ foreach(GEN 1 2)
     target_compile_definitions(${EXEC_NAME} PRIVATE PSP_MODEL=${MODEL})
 
     add_custom_command(
-        OUTPUT payloadex_loader_0${GEN}g.h
-        DEPENDS payloadex_loader_500_0${GEN}g
+        OUTPUT payloadex_0${GEN}g.h
+        DEPENDS payloadex_500_0${GEN}g
         COMMAND $<TARGET_PROPERTY:bin2cpp,EXEC>
             --c_style
-            payloadex="$<TARGET_FILE:payloadex_loader_500_0${GEN}g>".bin
-            payloadex_loader_0${GEN}g.h
+            payloadex="$<TARGET_FILE:payloadex_500_0${GEN}g>".bin
+            payloadex_0${GEN}g.h
     )
 
-    target_include_directories(${EXEC_NAME} PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
-    target_sources(${EXEC_NAME} PRIVATE payloadex_loader_0${GEN}g.h)
-    
     add_custom_command(
         TARGET ${EXEC_NAME}
         POST_BUILD
         COMMAND psp-objcopy -O binary ${EXEC_NAME} ${EXEC_NAME}.bin
-        COMMAND $<TARGET_PROPERTY:make_ipl_payload,EXEC>
-            --input_payload ${EXEC_NAME}.bin
-            --payload_addr 0x040E0000
-            --ipl_addr 0x040F0000
-            --output payload_0${GEN}g.bin
     )
+
+    target_include_directories(${EXEC_NAME} PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+    target_sources(${EXEC_NAME} PRIVATE payloadex_0${GEN}g.h)
+
 endforeach()

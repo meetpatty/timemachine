@@ -19,20 +19,6 @@
 
 PSP_MODULE_INFO("TimeMachine_Control", PSP_MODULE_KERNEL | PSP_MODULE_SINGLE_START | PSP_MODULE_SINGLE_LOAD | PSP_MODULE_NO_STOP, 1, 0);
 
-int SysEventHandler(int eventId, char *eventName, void *param, int *result);
-
-PspSysEventHandler sysEventHandler =
-	{
-		.size = sizeof(PspSysEventHandler),
-		.name = "",
-		.type_mask = 0x00FFFF00,
-		.handler = SysEventHandler};
-
-extern SceUID flashemu_sema;
-extern int msNotReady;
-extern FileHandler file_handler[MAX_FILES];
-
-extern int CloseOpenFile(int *argv);
 
 STMOD_HANDLER previous;
 
@@ -66,69 +52,6 @@ int codePagesceIoOpenPatched(const char *file, int flags, SceMode mode)
 		return 0x80010018;
 
 	return sceIoOpen(file, flags, mode);
-}
-
-int df_dopenPatched(int type, void * cb, void *arg)
-{
-	int res;
-
-	while(1) {
-		res = sceKernelExtendKernelStack(type, cb, arg);
-		if (res != 0x80010018)
-			return res;
-
-		if (*(int *)(arg + 4) == 0)
-			continue;
-
-		if (memcmp((void *)(*(int *)(arg + 4) + 4), TM_PATH_W, sizeof(TM_PATH_W)) == 0)
-			continue;
-
-		res = sceKernelExtendKernelStack(0x4000, (void *)CloseOpenFile, 0);
-		if (res < 0)
-			break;
-	}
-	return res;
-}
-
-int df_openPatched(int type, void * cb, void *arg)
-{
-	int res;
-
-	while(1) {
-		res = sceKernelExtendKernelStack(type, cb, arg);
-		if (res != 0x80010018)
-			return res;
-
-		if (*(int *)(arg + 4) == 0)
-			continue;
-
-		if (memcmp((void *)(*(int *)(arg + 4) + 4), TM_PATH_W, sizeof(TM_PATH_W)) == 0)
-			continue;
-
-		res = sceKernelExtendKernelStack(0x4000, (void *)CloseOpenFile, 0);
-		if (res < 0)
-			break;
-	}
-	return res;
-}
-
-int df_devctlPatched(int type, void *cb, void *arg)
-{
-	int res;
-
-	while(1)
-	{
-		res = sceKernelExtendKernelStack(type, cb, arg);
-		if (res != 0x80010018)
-			break;
-
-		res = sceKernelExtendKernelStack(0x4000, (void *)CloseOpenFile, 0);
-
-		if (res < 0)
-			break;
-	}
-
-	return res;
 }
 
 int OnModuleStart(SceModule2 *mod)
@@ -197,34 +120,7 @@ int module_start(SceSize args, void *argp)
 
 int module_reboot_before(SceSize args, void *argp)
 {
-	SceUInt timeout = 500000;
-	sceKernelWaitSema(flashemu_sema, 1, &timeout);
-	sceKernelDeleteSema(flashemu_sema);
-	sceIoUnassign("flash0:");
-	sceIoUnassign("flash1:");
-	sceIoUnassign("flash2:");
-	sceIoUnassign("flash3:");
-	sceKernelUnregisterSysEventHandler(&sysEventHandler);
+	UninstallFlashEmu();
 
-	return 0;
-}
-
-int SysEventHandler(int eventId, char *eventName, void *param, int *result)
-{
-	if (eventId == 0x4000) //suspend
-	{
-		int i;
-		for(i = 0; i < MAX_FILES; i++)
-		{
-			if(file_handler[i].opened && file_handler[i].unk_8 == 0 && file_handler[i].flags != DIR_FLAG)
-			{
-				file_handler[i].offset = sceIoLseek(file_handler[i].fd, 0, PSP_SEEK_CUR);
-				file_handler[i].unk_8 = 1;
-				sceIoClose(file_handler[i].fd);
-			}
-		}
-	}
-	else if (eventId == 0x10009) // resume
-		msNotReady = 1;
 	return 0;
 }
