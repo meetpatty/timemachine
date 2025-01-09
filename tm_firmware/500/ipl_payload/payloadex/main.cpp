@@ -18,6 +18,9 @@
 #elif PSP_MODEL == 1
 #include "pspbtcnf_recovery_02g.h"
 #define BTCNF_PATH "/kd/pspbtcnf_02g.bin"
+#elif PSP_MODEL == 2
+#include "pspbtcnf_recovery_03g.h"
+#define BTCNF_PATH "/kd/pspbtcnf_03g.bin"
 #endif
 
 namespace {

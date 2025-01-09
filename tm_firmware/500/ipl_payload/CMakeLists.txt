@@ -10,7 +10,7 @@ configure_file(
     "${CMAKE_CURRENT_BINARY_DIR}/linker.x"
 )
 
-foreach(GEN 1 2)
+foreach(GEN 1 2 3)
     math(EXPR MODEL "${GEN}-1")
     set(EXEC_NAME payload_500_0${GEN}g)
     add_executable(${EXEC_NAME})

@@ -33,6 +33,9 @@ int sceKernelGzipDecompressPatched(u8 *dest, int destSize, u8 *src, u32 unknown)
 		case 1:
 			src = rebootex_02g;
 			break;
+		case 2:
+			src = rebootex_03g;
+			break;
 	}
 
 	return sceKernelGzipDecompress(dest, destSize, src, 0);

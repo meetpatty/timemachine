@@ -11,9 +11,17 @@
 #if PSP_MODEL == 0
 #include <payloadex_loader_01g.h>
 #define LD_PAYLOADEX_ADDR   0x0400c534
+#define CLR_SCRATCHPAD_ADDR 0x04001100
 #elif PSP_MODEL == 1
 #include <payloadex_loader_02g.h>
 #define LD_PAYLOADEX_ADDR   0x0400d534
+#define CLR_SCRATCHPAD_ADDR 0x040011e4
+#define SET_KEYS_ADDRESS    0x04001144
+#elif PSP_MODEL == 2
+#include <payloadex_loader_03g.h>
+#define LD_PAYLOADEX_ADDR   0x0400d534
+#define CLR_SCRATCHPAD_ADDR 0x04001218
+#define SET_KEYS_ADDRESS    0x04001178
 #endif
 
 namespace {
@@ -30,17 +38,22 @@ namespace {
 	}
 
 	void clearCaches() {
-        iplKernelDcacheWritebackInvalidateAll();
+		iplKernelDcacheWritebackInvalidateAll();
 		iplKernelIcacheInvalidateAll();
 	}
 
-#if PSP_MODEL == 1
-    u32 key[] =
+#ifdef SET_KEYS_ADDRESS
+	u32 key[] =
 	{
+#if PSP_MODEL == 1
 		0x802a43ad, 0xa570d79a, 0x890e5087, 0xc6055fe5,
 		0xb7558656, 0x89d4608b, 0x83d431ea, 0x469dc537,
+#elif PSP_MODEL == 2
+		0x6e85db79, 0x3af7377a, 0xc404855d, 0xa3bc96c3,
+		0x112603fb, 0x5afd5d28, 0xe3a192e9, 0xf39ef7f7,
+#endif
 		0x0, 0x0, 0x0, 0x0,
-		0x0, 0x0, 0x0, 0x0		
+		0x0, 0x0, 0x0, 0x0
 	};
 
 	int setkey() {
@@ -78,13 +91,10 @@ int main() {
 	//Change payload entry point to payloadex
 	_sw(LUI(GPREG_T9, 0x88fc), LD_PAYLOADEX_ADDR);
 
-#if PSP_MODEL == 0
-	_sw(0, 0x04001100);
-#else
-	_sw(0, 0x04000360);
-	_sw(0, 0x040011e4);
-	MAKE_JUMP(0x04001144, setkey);
-	_sw(0, 0x04001148);
+	_sw(0, CLR_SCRATCHPAD_ADDR);
+
+#ifdef SET_KEYS_ADDRESS
+	MAKE_JUMP(SET_KEYS_ADDRESS, setkey);
 #endif
 
 	clearCaches();

@@ -22,6 +22,8 @@
 #define BTCNF_PATH "/kd/pspbtcnf.bin"
 #elif PSP_MODEL == 1
 #define BTCNF_PATH "/kd/pspbtcnf_02g.bin"
+#elif PSP_MODEL == 2
+#define BTCNF_PATH "/kd/pspbtcnf_03g.bin"
 #endif
 
 namespace {

@@ -14,6 +14,7 @@ add_custom_command(OUTPUT rebootex.h
         --gzip --c_style
         rebootex_01g="$<TARGET_FILE:rebootex500_01g>".bin
         rebootex_02g="$<TARGET_FILE:rebootex500_02g>".bin
+        rebootex_03g="$<TARGET_FILE:rebootex500_03g>".bin
         rebootex.h
 )
 

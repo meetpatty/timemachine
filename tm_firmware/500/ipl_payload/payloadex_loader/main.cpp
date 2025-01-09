@@ -12,6 +12,8 @@
 #include <payloadex_01g.h>
 #elif PSP_MODEL == 1
 #include <payloadex_02g.h>
+#elif PSP_MODEL == 2
+#include <payloadex_03g.h>
 #endif
 
 namespace {
@@ -24,6 +26,9 @@ namespace {
 #elif PSP_MODEL == 1
 	inline auto const sceSysconCommonWrite = reinterpret_cast<v_uiucuc_function_t const>(0x04006b98);
 	inline auto const sceSysconCommonRead = reinterpret_cast<v_ipuc_function_t const>(0x04006a54);
+#elif PSP_MODEL == 2
+	inline auto const sceSysconCommonWrite = reinterpret_cast<v_uiucuc_function_t const>(0x04006ba8);
+	inline auto const sceSysconCommonRead = reinterpret_cast<v_ipuc_function_t const>(0x04006a64);
 #endif
 
 	void clearCaches() {
